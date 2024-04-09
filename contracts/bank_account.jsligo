@@ -1,0 +1,56 @@
+export type STATUS = ["ACTIVE"] | ["RECOVERING", address, timestamp] | ["DEAD"];
+
+export type storage = {
+  owners: set<address>,
+  inheritors: set<address>,
+  status: STATUS
+};
+
+type ret = [list<operation>, storage];
+
+/**
+**Enroll an address to the smart contract wallet. Only an owner can do it
+*/
+
+@entry
+const enroll = (owner: address, s: storage): ret => {
+  if (Set.mem(Tezos.get_source(), s.owners)) return [
+    list([]),
+    { ...s, owners: Set.add(owner, s.owners) }
+  ]; else return failwith("Only owners can call this function")
+}
+
+/**
+**Revoke an address to the smart contract wallet. Only an owner can do it
+*/
+
+@entry
+const revoke = (owner: address, s: storage): ret => {
+  if (Set.mem(Tezos.get_source(), s.owners)) return [
+    list([]),
+    { ...s, owners: Set.remove(owner, s.owners) }
+  ]; else return failwith("Only owners can call this function")
+}
+
+/**
+** Send native money to someone. Only an owner can do it
+*/
+
+@entry
+const transfer_XTZ = ([target, amount]: [address, tez], s: storage): ret => {
+  if (Set.mem(Tezos.get_source(), s.owners)) {
+    if (Tezos.get_balance() < amount) return failwith(
+      "Cannot send more XTZ than the actual balance"
+    )
+    const op =
+      Tezos.transaction(
+        unit,
+        amount,
+        Tezos.get_contract_with_error(
+          target,
+          "Cannot find the contract from given address"
+        )
+      );
+    return [list([op]), s]
+  } else return failwith("Only owners can call this function")
+}

@@ -1,0 +1,11 @@
+#import "bank_account.jsligo" "Contract"
+
+// When this file was created, the smart contract was defined with an entrypoint using `@entry` that was not within a namespace. As such, the examples below are written with that assumption in mind.
+// IMPORTANT: We suggest always explicitly typing your storage values:
+const default_storage: Contract.storage = {
+    owners: Set.of_list(
+        list(["tz1VSUr8wwNhLAzempoch5d6hLRiTh8Cjcjb" as address])
+    ),
+    inheritors: Set.empty,
+    status: ACTIVE()
+}
