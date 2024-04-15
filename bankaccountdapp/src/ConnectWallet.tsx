@@ -1,45 +1,24 @@
-import { NetworkType } from "@airgap/beacon-sdk";
-import { BeaconWallet } from "@taquito/beacon-wallet";
-import { TezosToolkit } from "@taquito/taquito";
-import { Dispatch, SetStateAction } from "react";
+import { useContext } from "react";
+import { useNavigate } from "react-router-dom";
+import { connectWallet } from "./connectWallet";
+import { AppDispatchContext, AppStateContext } from "./state";
 
-type ButtonProps = {
-  Tezos: TezosToolkit;
-  setUserAddress: Dispatch<SetStateAction<string>>;
-  setUserBalance: Dispatch<SetStateAction<number>>;
-  wallet: BeaconWallet;
-};
+const ConnectButton = (): JSX.Element => {
+  const state = useContext(AppStateContext)!;
+  const dispatch = useContext(AppDispatchContext);
 
-const ConnectButton = ({
-  Tezos,
-  setUserAddress,
-  setUserBalance,
-  wallet,
-}: ButtonProps): JSX.Element => {
-  const connectWallet = async (): Promise<void> => {
-    try {
-      await wallet.requestPermissions({
-        network: {
-          type: NetworkType.GHOSTNET,
-          rpcUrl: "https://ghostnet.tezos.marigold.dev",
-        },
-      });
-      // gets user's address
-      const userAddress = await wallet.getPKH();
-      const balance = await Tezos.tz.getBalance(userAddress);
-      setUserBalance(balance.toNumber());
-      setUserAddress(userAddress);
-    } catch (error) {
-      console.log(error);
-    }
-  };
+  const navigate = useNavigate();
 
   return (
     <div className="buttons">
-      <button className="button" onClick={connectWallet}>
-        <span>
-          <i className="fas fa-wallet"></i>&nbsp; Connect with wallet
-        </span>
+      <button
+        className="button"
+        onClick={() => {
+          connectWallet(state, dispatch!); //remove url params
+          navigate("/");
+        }}
+      >
+        <i className="fas fa-times"></i>&nbsp; Connect wallet
       </button>
     </div>
   );

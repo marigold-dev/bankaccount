@@ -10,17 +10,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@airgap/beacon-sdk": "^4.2.1",
+    "@airgap/beacon-sdk": "file:../../beacon-sdk/packages/beacon-sdk/",
     "@taquito/beacon-wallet": "^19.2.0",
     "@taquito/taquito": "^19.2.0",
     "@tzkt/sdk-api": "^2.2.1",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "typedarray-to-buffer": "^4.0.0"
   },
   "devDependencies": {
     "@airgap/beacon-types": "^4.2.1",
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",
+    "@types/typedarray-to-buffer": "^4.0.4",
     "@typescript-eslint/eslint-plugin": "^7.2.0",
     "@typescript-eslint/parser": "^7.2.0",
     "@vitejs/plugin-react-swc": "^3.5.0",

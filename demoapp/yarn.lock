@@ -47,10 +47,8 @@
     "@airgap/beacon-transport-walletconnect" "4.2.1"
     "@airgap/beacon-ui" "4.2.1"
 
-"@airgap/beacon-sdk@^4.2.1":
+"@airgap/beacon-sdk@file:../../beacon-sdk/packages/beacon-sdk":
   version "4.2.1"
-  resolved "https://registry.yarnpkg.com/@airgap/beacon-sdk/-/beacon-sdk-4.2.1.tgz#b8c498f65d860152d02c0285c887b7ac9ccfef35"
-  integrity sha512-/NhrQBETARyB3UT1c7/IEAItV1RmCpdGd2m32Dn8MsyAmHki+y+BuKBuWuywjKOZHqVntkeqIWvh9thmBnih/w==
   dependencies:
     "@airgap/beacon-blockchain-substrate" "4.2.1"
     "@airgap/beacon-blockchain-tezos" "4.2.1"
@@ -966,6 +964,13 @@
   version "7.5.8"
   resolved "https://registry.yarnpkg.com/@types/semver/-/semver-7.5.8.tgz#8268a8c57a3e4abd25c165ecd36237db7948a55e"
   integrity sha512-I8EUhyrgfLrcTkzV3TSsGyl1tSuPrEDzr0yd5m90UgNxQkyDXULk3b6MlQqTCpZpNtWe1K0hzclnZkTcLBe2UQ==
+
+"@types/typedarray-to-buffer@^4.0.4":
+  version "4.0.4"
+  resolved "https://registry.yarnpkg.com/@types/typedarray-to-buffer/-/typedarray-to-buffer-4.0.4.tgz#cfdae6655c5ac58432c47c559a1138d8a5c5184d"
+  integrity sha512-TAH+1wUD82Dgotp/+CcRi3UGuJHnHkqv4Tbt4x3zNI9Lqvvfj+drzshWML0fbQYmEKEbS5cMTDV8FUDzAirp7g==
+  dependencies:
+    "@types/node" "*"
 
 "@typescript-eslint/eslint-plugin@^7.2.0":
   version "7.6.0"

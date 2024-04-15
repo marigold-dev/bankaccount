@@ -1,24 +1,80 @@
-import { TransactionInvalidBeaconError } from "@airgap/beacon-sdk";
+import { LocalStorage } from "@airgap/beacon-sdk";
 import { NetworkType } from "@airgap/beacon-types";
 import { Snackbar } from "@mui/base/Snackbar";
-import { Alert, AlertColor, TextField } from "@mui/material";
+import { Alert, AlertColor } from "@mui/material";
 import { BeaconWallet } from "@taquito/beacon-wallet";
-import { TezosToolkit } from "@taquito/taquito";
 import * as api from "@tzkt/sdk-api";
-import { useEffect, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
+import { RouterProvider, createBrowserRouter } from "react-router-dom";
 import "./App.css";
 import ConnectButton from "./ConnectWallet";
+import CreateBankAccountComponent from "./CreateBankAccountComponent";
 import DisconnectButton from "./DisconnectWallet";
-import { STATUS } from "./bank_account.types";
-import jsonContractTemplate from "./contractTemplate/bank_account.json";
-import { address } from "./type-aliases";
+import LoginModal from "./LoginModal";
+import P2PClient from "./P2PClient";
+import PoeModal from "./PoeModal";
+import { BankAccountWalletType, Storage } from "./bank_account.types";
+import {
+  AppDispatchContext,
+  AppStateContext,
+  action,
+  emptyState,
+  reducer,
+  tezosState,
+} from "./state";
+
+export const fetchContracts = async (
+  state: tezosState,
+  userAddress?: string
+): Promise<{ [address: string]: [Storage, number] }> => {
+  const contractsTZKT = (
+    await api.contractsGetSimilar(import.meta.env.VITE_CONTRACT_ADDRESS, {
+      includeStorage: true,
+      sort: { desc: "id" },
+    })
+  ).filter(
+    (c) =>
+      (c.storage.owners as string[]).findIndex((owner) =>
+        owner === userAddress ? userAddress : state.address
+      ) >= 0
+  );
+
+  // console.log("fetchContracts contractsTZKT", contractsTZKT);
+
+  let contractsWithStorage = {} as { [address: string]: [Storage, number] };
+
+  await Promise.all(
+    contractsTZKT.map(async (tzktContract) => {
+      contractsWithStorage[tzktContract.address as string] = [
+        await (
+          await state.connection.wallet.at<BankAccountWalletType>(
+            "" + tzktContract.address
+          )
+        ).storage(),
+        tzktContract.balance!,
+      ];
+    })
+  );
+
+  // console.log("fetchContracts results", contractsWithStorage);
+
+  return contractsWithStorage;
+};
 
 function App() {
   api.defaults.baseUrl = "https://api.ghostnet.tzkt.io";
 
+  const [state, dispatch]: [tezosState, React.Dispatch<action>] = useReducer(
+    reducer,
+    emptyState()
+  );
+
+  const [openModal, setOpenModal] = useState(false);
+  const [openPoeModal, setOpenPoeModal] = useState(false);
+
   //snackbar
   const [open, setOpen] = useState(false);
-  const [exited, setExited] = useState(true);
+  const [exited, _setExited] = useState(true);
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState<AlertColor>("info");
 
@@ -28,152 +84,182 @@ function App() {
     setOpen(true);
   };
 
-  const Tezos = new TezosToolkit("https://ghostnet.tezos.marigold.dev");
-  const wallet = new BeaconWallet({
-    name: "Training",
-    preferredNetwork: NetworkType.GHOSTNET,
-  });
-  Tezos.setWalletProvider(wallet);
+  const [contracts, setContracts] = useState<{
+    [address: string]: [Storage, number];
+  }>({});
+
+  const [data, setData] = useState<undefined | string>();
+
+  useEffect(() => {
+    //IF DATA ON URL IT IS A PAIRING REQUEST FROM A DAPP
+    const queryParams = new URLSearchParams(window.location.search);
+    console.log("queryParams", queryParams);
+    const isPairing = queryParams.has("type") && queryParams.has("data");
+
+    if (isPairing) {
+      setData(queryParams.get("data")!);
+      setOpenModal(true);
+    }
+  }, []);
 
   useEffect(() => {
     (async () => {
-      const activeAccount = await wallet.client.getActiveAccount();
-      if (activeAccount) {
-        setUserAddress(activeAccount.address);
-        const balance = await Tezos.tz.getBalance(activeAccount.address);
-        setUserBalance(balance.toNumber());
+      if (state!.beaconWallet === null) {
+        let a = emptyState();
+
+        const p2pClient = new P2PClient({
+          name: "Bank Account",
+          storage: new LocalStorage("P2P"),
+        });
+
+        await p2pClient.init();
+        await p2pClient.connect(p2pClient.handleMessages);
+        // Connect stored peers
+        Object.entries(a.connectedDapps).forEach(async ([_address, dapps]) => {
+          Object.values(dapps).forEach((data) => {
+            p2pClient
+              .addPeer(data)
+              .catch((_) => console.log("Failed to connect to peer", data));
+          });
+        });
+
+        const wallet = new BeaconWallet({
+          name: "Bank Account",
+          preferredNetwork: NetworkType.GHOSTNET,
+          storage: new LocalStorage("WALLET"),
+        });
+
+        dispatch!({ type: "beaconConnect", payload: wallet });
+        dispatch!({ type: "p2pConnect", payload: p2pClient });
+
+        //if (state.attemptedInitialLogin) return;
+
+        const activeAccount = await wallet.client.getActiveAccount();
+        if (activeAccount && state?.accountInfo == null) {
+          const userAddress = await wallet.getPKH();
+          const balance = await state?.connection.tz.getBalance(userAddress);
+
+          const contracts = await fetchContracts(state, userAddress);
+          setContracts(contracts);
+
+          dispatch({
+            type: "login",
+            accountInfo: activeAccount!,
+            address: userAddress,
+            balance: balance!.toString(),
+            contracts: contracts,
+          });
+        }
       }
     })();
-  }, []);
+  }, [state.beaconWallet]);
 
-  const [userAddress, setUserAddress] = useState<string>("");
-  const [userBalance, setUserBalance] = useState<number>(0);
+  const router = createBrowserRouter([
+    {
+      path: "/",
+      element: (
+        <div className="App">
+          <LoginModal
+            openModal={openModal}
+            setOpenModal={setOpenModal}
+            data={data}
+            onEnd={() => {
+              setData(undefined);
+              setOpenModal(false);
+            }}
+            enqueueSnackbar={enqueueSnackbar}
+          />
 
-  const [balanceForNewContract, setBalanceForNewContract] = useState<number>(0);
+          <PoeModal
+            openPoeModal={openPoeModal}
+            setOpenPoeModal={setOpenPoeModal}
+            enqueueSnackbar={enqueueSnackbar}
+          />
 
-  const [contracts, setContracts] = useState<Array<api.Contract>>([]);
-  const fetchContracts = () => {
-    (async () => {
-      setContracts(
-        (
-          await api.contractsGetSimilar(import.meta.env.VITE_CONTRACT_ADDRESS, {
-            includeStorage: true,
-            sort: { desc: "id" },
-          })
-        ).filter(
-          (c) =>
-            (c.storage.owners as string[]).findIndex(
-              (owner) => owner === userAddress
-            ) >= 0
-        )
-      );
-    })();
-  };
+          <Snackbar
+            open={open}
+            onClose={(_, reason) => {
+              if (reason === "clickaway") {
+                return;
+              }
+              setOpen(false);
+              setOpenPoeModal(false);
+              setMessage("");
+            }}
+            exited={exited}
+            autoHideDuration={status == "error" ? 20000 : 5000}
+          >
+            <Alert variant="filled" severity={status}>
+              {message}
+            </Alert>
+          </Snackbar>
+          <h1>Bank Account Management</h1>
+          <hr />
+          <h2>Connection</h2>
+          {state.address ? (
+            <>
+              <div>
+                I am {state.address} with {state.balance} mutez
+              </div>
+              <DisconnectButton />
+            </>
+          ) : (
+            <ConnectButton />
+          )}
+          <hr />
+          <CreateBankAccountComponent enqueueSnackbar={enqueueSnackbar} />
+          <hr />
+          <button
+            onClick={async () => setContracts(await fetchContracts(state))}
+          >
+            List of bank accounts
+          </button>
+          <table>
+            <thead>
+              <tr>
+                <th>address</th>
+                <th>owners</th>
+                <th>balance</th>
+                <th>selected</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from(Object.entries(contracts)).map(
+                ([contractAddress, [contractStorage, contractBalance]]) => (
+                  <tr key={contractAddress}>
+                    <td style={{ borderStyle: "dotted" }}>{contractAddress}</td>
+                    <td style={{ borderStyle: "dotted" }}>
+                      {contractStorage !== null &&
+                      contractStorage.owners !== null
+                        ? (contractStorage.owners as string[]).join(",")
+                        : ""}
+                    </td>
+                    <td style={{ borderStyle: "dotted" }}>
+                      {" "}
+                      {(contractBalance ?? 0) / 1000000} tez
+                    </td>
 
-  const createBankAccountContract = async () => {
-    try {
-      const op = await Tezos.wallet
-        .originate({
-          code: jsonContractTemplate,
-          storage: {
-            owners: [userAddress as address],
-            inheritors: [],
-            status: { aCTIVE: true } as STATUS,
-          },
-          balance: balanceForNewContract,
-        })
-        .send();
+                    <td style={{ borderStyle: "dotted" }}>
+                      {state.currentContract == contractAddress ? "X" : ""}
+                    </td>
+                  </tr>
+                )
+              )}
+            </tbody>
+          </table>
 
-      await op.confirmation(2);
-
-      enqueueSnackbar(
-        `Origination completed for ${(await op.contract()).address}.`,
-        "success"
-      );
-
-      await fetchContracts();
-    } catch (error) {
-      console.table(`Error: ${JSON.stringify(error, null, 2)}`);
-      let tibe: TransactionInvalidBeaconError =
-        new TransactionInvalidBeaconError(error);
-      enqueueSnackbar(tibe.message, "error");
-    }
-  };
+          <hr />
+        </div>
+      ),
+    },
+  ]);
 
   return (
-    <div className="App">
-      <Snackbar
-        open={open}
-        onClose={(_, reason) => {
-          if (reason === "clickaway") {
-            return;
-          }
-          setOpen(false);
-          setMessage("");
-        }}
-        exited={exited}
-        autoHideDuration={status == "error" ? 20000 : 5000}
-      >
-        <Alert variant="filled" severity={status}>
-          {message}
-        </Alert>
-      </Snackbar>
-      <h1>Bank Account Management</h1>
-      <hr />
-      <h2>Connection</h2>
-      <ConnectButton
-        Tezos={Tezos}
-        setUserAddress={setUserAddress}
-        setUserBalance={setUserBalance}
-        wallet={wallet}
-      />
-      <DisconnectButton
-        wallet={wallet}
-        setUserAddress={setUserAddress}
-        setUserBalance={setUserBalance}
-      />
-      <div>
-        I am {userAddress} with {userBalance} mutez
-      </div>
-      <hr />
-      <button onClick={createBankAccountContract}>
-        Create Bank account
-      </button>{" "}
-      <TextField
-        type="number"
-        label="deposit (in tez)"
-        variant="standard"
-        value={balanceForNewContract}
-        onChange={(v) => setBalanceForNewContract(Number(v.target.value))}
-      />
-      <hr />
-      <button onClick={fetchContracts}>List of bank accounts</button>
-      <table>
-        <thead>
-          <tr>
-            <th>address</th>
-            <th>owners</th>
-            <th>balance</th>
-          </tr>
-        </thead>
-        <tbody>
-          {contracts.map((contract) => (
-            <tr key={contract.address}>
-              <td style={{ borderStyle: "dotted" }}>{contract.address}</td>
-              <td style={{ borderStyle: "dotted" }}>
-                {contract.storage !== null && contract.storage.owners !== null
-                  ? (contract.storage.owners as string[]).join(",")
-                  : ""}
-              </td>
-              <td style={{ borderStyle: "dotted" }}>
-                {" "}
-                {(contract.balance ?? 0) / 1000000} tez
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <AppStateContext.Provider value={state}>
+      <AppDispatchContext.Provider value={dispatch}>
+        <RouterProvider router={router}></RouterProvider>
+      </AppDispatchContext.Provider>
+    </AppStateContext.Provider>
   );
 }
 

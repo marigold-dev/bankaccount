@@ -1,22 +1,15 @@
-import { BeaconWallet } from "@taquito/beacon-wallet";
-import { Dispatch, SetStateAction } from "react";
+import { useContext } from "react";
+import { AppDispatchContext, AppStateContext } from "./state";
 
-interface ButtonProps {
-  wallet: BeaconWallet;
-  setUserAddress: Dispatch<SetStateAction<string>>;
-  setUserBalance: Dispatch<SetStateAction<number>>;
-}
+const DisconnectButton = (): JSX.Element => {
+  const state = useContext(AppStateContext)!;
+  const dispatch = useContext(AppDispatchContext);
 
-const DisconnectButton = ({
-  wallet,
-  setUserAddress,
-  setUserBalance,
-}: ButtonProps): JSX.Element => {
   const disconnectWallet = async (): Promise<void> => {
-    setUserAddress("");
-    setUserBalance(0);
-    console.log("disconnecting wallet");
-    await wallet.clearActiveAccount();
+    if (state?.beaconWallet) {
+      await state.beaconWallet.clearActiveAccount();
+    }
+    dispatch!({ type: "logout" });
   };
 
   return (
