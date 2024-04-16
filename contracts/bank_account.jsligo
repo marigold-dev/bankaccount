@@ -6,12 +6,26 @@
 */
 export type STATUS = ["ACTIVE"] | ["RECOVERING", address, timestamp] | ["DEAD"];
 
+export type FREQUENCY =
+  | ["SECOND", nat]
+  | ["MINUTE", nat]
+  | ["HOUR", nat]
+  | ["DAY", nat]
+  | ["WEEK", nat]
+  | ["MONTH", nat]
+  | ["YEAR", nat];
+
 export type storage = {
   owners: set<address>,
   inheritors: set<address>,
   status: STATUS,
   quick_recovery_stake: tez, // The minimum stake a claimer should send to be able to call this function. By default it is equal to the balance of the account, otherwise, it is an amount in tez.
-  quick_recovery_period: nat // The time in days for the owner of the smart contract wallet to wait until he can retake control of his SC wallet. By default, it is 1 week.
+  quick_recovery_period: nat, // The time in days for the owner of the smart contract wallet to wait until he can retake control of his SC wallet. By default, it is 1 week.
+  direct_debit_mandates: big_map<[address, FREQUENCY], tez>, // mandates for XTZ
+  direct_debit_mandates_history: big_map<
+    [address, FREQUENCY],
+    timestamp
+  > // executed mandates for XTZ
 
 };
 
@@ -119,4 +133,162 @@ const stop_recovery = (_: unit, s: storage): ret => {
     "Only an owner can stop a recovery process"
   )
   return [list([]), { ...s, status: ACTIVE() }];
+}
+
+/*
+* Add a new direct debit mandate in XTZ. Only owners can do it
+*/
+
+@entry
+const add_direct_debit_mandate_XTZ = (
+  [beneficiary, frequency, amount]: [address, FREQUENCY, tez],
+  s: storage
+): ret => {
+  if (! Set.mem(Tezos.get_source(), s.owners)) failwith(
+    "Only owners can call this function"
+  )
+  return [
+    list([]),
+    {
+      ...s,
+      direct_debit_mandates: Big_map.add(
+        [beneficiary, frequency],
+        amount,
+        s.direct_debit_mandates
+      )
+    }
+  ];
+}
+
+/*
+* Revoke a direct debit mandate in XTZ. Only owners can do it
+*/
+
+@entry
+const revoke_direct_debit_mandate_XTZ = (
+  [beneficiary, frequency]: [address, FREQUENCY],
+  s: storage
+): ret => {
+  if (! Set.mem(Tezos.get_source(), s.owners)) failwith(
+    "Only owners can call this function"
+  )
+  return [
+    list([]),
+    {
+      ...s,
+      direct_debit_mandates: Big_map.remove(
+        [beneficiary, frequency],
+        s.direct_debit_mandates
+      )
+    }
+  ];
+}
+
+const getMinimumDelayInSeconds = (frequency: FREQUENCY): int => {
+  return match(frequency) {
+    when (SECOND(nb)):
+      1 * nb
+    when (MINUTE(nb)):
+      60 * nb
+    when (HOUR(nb)):
+      60 * 60 * nb
+    when (DAY(nb)):
+      86400 * nb
+    when (WEEK(nb)):
+      7 * 86400 * nb
+    when (MONTH(nb)):
+      30 * 86400 * nb
+    when (YEAR(nb)):
+      365 * 86400 * nb
+  }
+}
+
+/*
+* Execute a direct debit mandate in XTZ. Only the beneficiary can call this function at the correct date and not twice
+*/
+
+@entry
+const execute_direct_debit_mandate_XTZ = (
+  [requestedAmount, frequency]: [tez, FREQUENCY],
+  s: storage
+): ret => {
+  return match(
+    Big_map.find_opt([Tezos.get_source(), frequency], s.direct_debit_mandates)
+  ) {
+    when (None()):
+      failwith("Cannot find a direct debit mandate from the input values")
+    when (Some(amountFromMandate)):
+      do {
+        if (! Set.mem(Tezos.get_source(), s.owners)) return failwith(
+          "Only owners can call this function"
+        );
+        if (requestedAmount > amountFromMandate) return failwith(
+          "You cannot ask for more than the mandate indicated"
+        );
+        //look back in history to not take it twice ...
+        return match(
+          Big_map.find_opt(
+            [Tezos.get_source(), frequency],
+            s.direct_debit_mandates_history
+          )
+        ) {
+          when (None()):
+            do {
+              return [
+                list(
+                  [
+                    Tezos.transaction(
+                      unit,
+                      requestedAmount,
+                      Tezos.get_contract_with_error(
+                        Tezos.get_source(),
+                        "Cannot find the caller contract"
+                      )
+                    )
+                  ]
+                ),
+                {
+                  ...s,
+                  direct_debit_mandates_history: Big_map.add(
+                    [Tezos.get_source(), frequency],
+                    Tezos.get_now(),
+                    s.direct_debit_mandates_history
+                  )
+                }
+              ]
+            }
+          when (Some(last_execution_timestamp)):
+            do {
+              if (
+                last_execution_timestamp + getMinimumDelayInSeconds(frequency)
+                > Tezos.get_now()
+              ) return failwith(
+                "Cannot call the mandate again, it is too early"
+              );
+              return [
+                list(
+                  [
+                    Tezos.transaction(
+                      unit,
+                      requestedAmount,
+                      Tezos.get_contract_with_error(
+                        Tezos.get_source(),
+                        "Cannot find the caller contract"
+                      )
+                    )
+                  ]
+                ),
+                {
+                  ...s,
+                  direct_debit_mandates_history: Big_map.add(
+                    [Tezos.get_source(), frequency],
+                    Tezos.get_now(),
+                    s.direct_debit_mandates_history
+                  )
+                }
+              ]
+            }
+        }
+      }
+  }
 }

@@ -9,5 +9,7 @@ const default_storage: Contract.storage = {
     inheritors: Set.empty,
     status: ACTIVE(),
     quick_recovery_stake: 1000000mutez,
-    quick_recovery_period: 0n
+    quick_recovery_period: 0n,
+    direct_debit_mandates: Big_map.empty,
+    direct_debit_mandates_history: Big_map.empty
 }
