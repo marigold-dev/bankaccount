@@ -1,7 +1,7 @@
 import { LocalStorage } from "@airgap/beacon-sdk";
 import { NetworkType } from "@airgap/beacon-types";
 import { Snackbar } from "@mui/base/Snackbar";
-import { Alert, AlertColor } from "@mui/material";
+import { Alert, AlertColor, Chip, TextField } from "@mui/material";
 import { BeaconWallet } from "@taquito/beacon-wallet";
 import * as api from "@tzkt/sdk-api";
 import { useEffect, useReducer, useState } from "react";
@@ -22,6 +22,7 @@ import {
   reducer,
   tezosState,
 } from "./state";
+import { address } from "./type-aliases";
 
 export const fetchContracts = async (
   state: tezosState,
@@ -35,7 +36,7 @@ export const fetchContracts = async (
   ).filter(
     (c) =>
       (c.storage.owners as string[]).findIndex((owner) =>
-        owner === userAddress ? userAddress : state.address
+        userAddress ? userAddress == owner : state.address == owner
       ) >= 0
   );
 
@@ -56,7 +57,7 @@ export const fetchContracts = async (
     })
   );
 
-  // console.log("fetchContracts results", contractsWithStorage);
+  console.log("fetchContracts results", contractsWithStorage);
 
   return contractsWithStorage;
 };
@@ -154,6 +155,104 @@ function App() {
     })();
   }, [state.beaconWallet]);
 
+  const [claimedBankAccount, setClaimedBankAccount] = useState<
+    string | undefined
+  >();
+
+  const start_recover = async () => {
+    try {
+      const cc: BankAccountWalletType =
+        await state.connection.wallet.at<BankAccountWalletType>(
+          claimedBankAccount!
+        );
+
+      const op = await cc.methodsObject
+        .start_recover(state.address! as address)
+        .send({
+          amount: (await cc.storage()).quick_recovery_stake.toNumber(),
+          mutez: true,
+        });
+
+      await op.confirmation(2);
+
+      enqueueSnackbar(
+        state.address +
+          " has claimed recovery on bank account " +
+          claimedBankAccount,
+        "success"
+      );
+    } catch (e) {
+      console.log("Error", e);
+      return;
+    }
+  };
+
+  const claim_recovery = async () => {
+    try {
+      const cc: BankAccountWalletType =
+        await state.connection.wallet.at<BankAccountWalletType>(
+          claimedBankAccount!
+        );
+
+      const op = await cc.methodsObject.claim_recovery().send();
+
+      await op.confirmation(2);
+
+      enqueueSnackbar(
+        state.address + " has recovered bank account " + claimedBankAccount,
+        "success"
+      );
+    } catch (e) {
+      console.log("Error", e);
+      return;
+    }
+  };
+
+  const stop_recovery = async () => {
+    try {
+      const cc: BankAccountWalletType =
+        await state.connection.wallet.at<BankAccountWalletType>(
+          claimedBankAccount!
+        );
+
+      const op = await cc.methodsObject.stop_recovery().send();
+
+      await op.confirmation(2);
+
+      enqueueSnackbar(
+        state.address +
+          " has stopped bank account " +
+          claimedBankAccount +
+          " recovery",
+        "success"
+      );
+    } catch (e) {
+      console.log("Error", e);
+      return;
+    }
+  };
+
+  const revoke = async (bankAccount: string, ownerToRevoke: string) => {
+    console.log("************" + ownerToRevoke + "****************");
+
+    try {
+      const cc: BankAccountWalletType =
+        await state.connection.wallet.at<BankAccountWalletType>(bankAccount);
+
+      const op = await cc.methodsObject.revoke(ownerToRevoke as address).send();
+
+      await op.confirmation(2);
+
+      enqueueSnackbar(
+        ownerToRevoke + " has been revoked from bank account " + bankAccount,
+        "success"
+      );
+    } catch (e) {
+      console.log("Error", e);
+      return;
+    }
+  };
+
   const router = createBrowserRouter([
     {
       path: "/",
@@ -209,10 +308,12 @@ function App() {
           <hr />
           <CreateBankAccountComponent enqueueSnackbar={enqueueSnackbar} />
           <hr />
+          <h2>Bank accounts</h2>
+
           <button
             onClick={async () => setContracts(await fetchContracts(state))}
           >
-            List of bank accounts
+            Refresh bank accounts
           </button>
           <table>
             <thead>
@@ -220,7 +321,9 @@ function App() {
                 <th>address</th>
                 <th>owners</th>
                 <th>balance</th>
+                <th>status</th>
                 <th>selected</th>
+                <th>direct debit mandates </th>
               </tr>
             </thead>
             <tbody>
@@ -231,7 +334,18 @@ function App() {
                     <td style={{ borderStyle: "dotted" }}>
                       {contractStorage !== null &&
                       contractStorage.owners !== null
-                        ? (contractStorage.owners as string[]).join(",")
+                        ? contractStorage.owners.map((owner) => (
+                            <Chip
+                              onMouseDown={(event) => {
+                                event.stopPropagation();
+                              }}
+                              key={owner}
+                              variant="outlined"
+                              color="primary"
+                              label={owner}
+                              onDelete={() => revoke(contractAddress, owner)}
+                            />
+                          ))
                         : ""}
                     </td>
                     <td style={{ borderStyle: "dotted" }}>
@@ -240,8 +354,21 @@ function App() {
                     </td>
 
                     <td style={{ borderStyle: "dotted" }}>
+                      {"aCTIVE" in contractStorage.status
+                        ? "ACTIVE"
+                        : "dEAD" in contractStorage.status
+                        ? "DEAD"
+                        : "RECOVERING(" +
+                          contractStorage.status.rECOVERING[3] +
+                          "," +
+                          contractStorage.status.rECOVERING[4] +
+                          ")"}
+                    </td>
+
+                    <td style={{ borderStyle: "dotted" }}>
                       {state.currentContract == contractAddress ? "X" : ""}
                     </td>
+                    <td>//TODO</td>
                   </tr>
                 )
               )}
@@ -249,6 +376,19 @@ function App() {
           </table>
 
           <hr />
+
+          <h2>Recovery process </h2>
+
+          <TextField
+            type="text"
+            label="KT1 to claim"
+            variant="standard"
+            value={claimedBankAccount}
+            onChange={(v) => setClaimedBankAccount(v.target.value)}
+          />
+          <button onClick={start_recover}>Recover bank account</button>
+          <button onClick={claim_recovery}>Claim bank account</button>
+          <button onClick={stop_recovery}>Stop bank account recovery</button>
         </div>
       ),
     },

@@ -7,5 +7,7 @@ const default_storage: Contract.storage = {
         list(["tz1VSUr8wwNhLAzempoch5d6hLRiTh8Cjcjb" as address])
     ),
     inheritors: Set.empty,
-    status: ACTIVE()
+    status: ACTIVE(),
+    quick_recovery_stake: 1000000mutez,
+    quick_recovery_period: 0n
 }

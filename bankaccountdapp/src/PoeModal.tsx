@@ -76,7 +76,6 @@ const PoeModal = ({
     if (transfers && transfers.length > 0) setOpenPoeModal(true);
 
     let dapp: CustomView;
-    console.log("useMemo transfers", transfers);
     return { dapp };
   }, [transfers]);
 
@@ -89,10 +88,7 @@ const PoeModal = ({
     };
 
     const transactionCb = async (message: OperationRequestOutput) => {
-      console.log(
-        "************************** transactionCb catched event!",
-        message
-      );
+
 
       if (!state.contracts[message.sourceAddress]) {
         state.p2pClient?.abortRequest(

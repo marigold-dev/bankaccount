@@ -1,9 +1,18 @@
+/**
+*An indicator of the status of the SC wallet
+*    ACTIVE: default status
+*    RECOVERING(address,timestamp): when the owner or someone else is trying to recover the account
+*    DEAD: the owner is considered dead. All entry points are disabled except reboot_inheritancy_countdown and claim_inheritancy
+*/
 export type STATUS = ["ACTIVE"] | ["RECOVERING", address, timestamp] | ["DEAD"];
 
 export type storage = {
   owners: set<address>,
   inheritors: set<address>,
-  status: STATUS
+  status: STATUS,
+  quick_recovery_stake: tez, // The minimum stake a claimer should send to be able to call this function. By default it is equal to the balance of the account, otherwise, it is an amount in tez.
+  quick_recovery_period: nat // The time in days for the owner of the smart contract wallet to wait until he can retake control of his SC wallet. By default, it is 1 week.
+
 };
 
 type ret = [list<operation>, storage];
@@ -53,4 +62,61 @@ const transfer_XTZ = ([target, amount]: [address, tez], s: storage): ret => {
       );
     return [list([op]), s]
   } else return failwith("Only owners can call this function")
+}
+
+/**
+** Initiate a process of recovery due to complete lost or stolen keys. 
+* This function requires passing some tez in order to avoid spam. 
+* @see quick_recovery_stake and quick_recovery_period settings. 
+* It is only possible if the contract is ACTIVE.
+*/
+
+@entry
+const start_recover = (claimer: address, s: storage): ret => {
+  if (s.status != ACTIVE()) return failwith(
+    "Only active bank accounts can start recovery process"
+  );
+  if (Tezos.get_amount() < s.quick_recovery_stake) return failwith(
+    "To a start recovery process, you need to stake a minimum amount (cf. quick_recovery_stake settings)"
+  );
+  return [list([]), { ...s, status: RECOVERING(claimer, Tezos.get_now()) }];
+}
+
+/**
+**This function should enroll the claimer address as an owner after a certain period of time has passed and the recovery has not been canceled (i.e. in status RECOVERING). 
+* If ok, the status passes to ACTIVE. 
+* @see quick_recovery_stake and quick_recovery_period settings
+*/
+
+@entry
+const claim_recovery = (_: unit, s: storage): ret => {
+  return match(s.status) {
+    when (ACTIVE()):
+      failwith("Only recovering bank accounts can be claimed")
+    when (DEAD()):
+      failwith("Only recovering bank accounts can be claimed")
+    when (RECOVERING(claimer, claimDate)):
+      do {
+        if (claimDate + (s.quick_recovery_period * 86400) > Tezos.get_now()) return failwith(
+          "Too early to claim a bank account recovery, wait for quick_recovery_period to pass"
+        );
+        return [
+          list([]),
+          { ...s, owners: Set.add(claimer, s.owners), status: ACTIVE() }
+        ];
+      }
+  }
+}
+
+/**
+* Stop the recovery process. This function can be called only by an owner. 
+* The status is back to ACTIVE.
+*/
+
+@entry
+const stop_recovery = (_: unit, s: storage): ret => {
+  if (! Set.mem(Tezos.get_source(), s.owners)) return failwith(
+    "Only an owner can stop a recovery process"
+  )
+  return [list([]), { ...s, status: ACTIVE() }];
 }

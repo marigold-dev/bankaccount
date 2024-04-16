@@ -1,6 +1,7 @@
 
 import { ContractAbstractionFromContractType, WalletContractAbstractionFromContractType } from './type-utils';
-import { address, mutez, timestamp, unit } from './type-aliases';
+import { address, mutez, nat, timestamp, unit } from './type-aliases';
+
 
 export type STATUS =  (
     { aCTIVE: unit }
@@ -17,9 +18,14 @@ export type Storage = {
     owners: Array<address>;
     inheritors: Array<address>;
     status:STATUS;
+    quick_recovery_stake: mutez;
+    quick_recovery_period: nat;
 };
 
 type Methods = {
+    stop_recovery: () => Promise<void>;
+    claim_recovery: () => Promise<void>;
+    start_recover: (param: address) => Promise<void>;
     transfer_XTZ: (
         _0: address,
         _1: mutez,
@@ -28,11 +34,17 @@ type Methods = {
     enroll: (param: address) => Promise<void>;
 };
 
+export type StopRecoveryParams = unit
+export type ClaimRecoveryParams = unit
+export type StartRecoverParams = address
 export type TransferXTZParams = address
 export type RevokeParams = address
 export type EnrollParams = address
 
 type MethodsObject = {
+    stop_recovery: () => Promise<void>;
+    claim_recovery: () => Promise<void>;
+    start_recover: (param: address) => Promise<void>;
     transfer_XTZ: (params: {
         0: address,
         1: mutez,

@@ -37,10 +37,6 @@ class P2PClient extends WalletClient {
   constructor(config: WalletClientOptions) {
     super(config);
 
-    console.log(
-      "******************************* P2PClient constructor done",
-      this
-    );
   }
 
   hasReceivedPermissionRequest() {
@@ -52,10 +48,6 @@ class P2PClient extends WalletClient {
   }
 
   on(event: Event, callback: Function) {
-    console.log(
-      "*********************************************on event ",
-      event
-    );
     return this.events.on(event, callback);
   }
 
