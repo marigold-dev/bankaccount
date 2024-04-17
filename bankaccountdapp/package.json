@@ -14,6 +14,7 @@
     "@emotion/react": "^11.11.4",
     "@emotion/styled": "^11.11.5",
     "@mui/base": "^5.0.0-beta.40",
+    "@mui/icons-material": "^5.15.15",
     "@mui/material": "^5.15.15",
     "@taquito/beacon-wallet": "^19.2.0",
     "@taquito/taquito": "^19.2.0",

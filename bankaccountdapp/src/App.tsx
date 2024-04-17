@@ -1,19 +1,26 @@
 import { LocalStorage } from "@airgap/beacon-sdk";
 import { NetworkType } from "@airgap/beacon-types";
 import { Snackbar } from "@mui/base/Snackbar";
-import { Alert, AlertColor, Chip, TextField } from "@mui/material";
+import DeleteIcon from "@mui/icons-material/Delete";
+import { Alert, AlertColor, Chip, IconButton, TextField } from "@mui/material";
 import { BeaconWallet } from "@taquito/beacon-wallet";
 import * as api from "@tzkt/sdk-api";
+import BigNumber from "bignumber.js";
 import { useEffect, useReducer, useState } from "react";
 import { RouterProvider, createBrowserRouter } from "react-router-dom";
 import "./App.css";
 import ConnectButton from "./ConnectWallet";
 import CreateBankAccountComponent from "./CreateBankAccountComponent";
+import CreateDirectDebitMandateComponent from "./CreateDirectDebitMandateComponent";
 import DisconnectButton from "./DisconnectWallet";
 import LoginModal from "./LoginModal";
 import P2PClient from "./P2PClient";
 import PoeModal from "./PoeModal";
-import { BankAccountWalletType, Storage } from "./bank_account.types";
+import {
+  BankAccountWalletType,
+  FREQUENCY,
+  Storage,
+} from "./bank_account.types";
 import {
   AppDispatchContext,
   AppStateContext,
@@ -22,7 +29,7 @@ import {
   reducer,
   tezosState,
 } from "./state";
-import { address } from "./type-aliases";
+import { address, mutez } from "./type-aliases";
 
 export const fetchContracts = async (
   state: tezosState,
@@ -91,6 +98,19 @@ function App() {
 
   const [data, setData] = useState<undefined | string>();
 
+  const [direct_debit_mandates, setDirect_debit_mandates] = useState<
+    Map<
+      address,
+      Map<
+        {
+          0: address;
+          1: FREQUENCY;
+        },
+        mutez
+      >
+    >
+  >(new Map());
+
   useEffect(() => {
     //IF DATA ON URL IT IS A PAIRING REQUEST FROM A DAPP
     const queryParams = new URLSearchParams(window.location.search);
@@ -154,6 +174,83 @@ function App() {
       }
     })();
   }, [state.beaconWallet]);
+
+  useEffect(() => {
+    (async () => {
+      if (state.contracts && Object.keys(state.contracts).length > 0) {
+        console.log(
+          "************Refreshing the mandates for the contracts ..."
+        );
+
+        //fetch also the mandates
+        Promise.all(
+          //fetch all keys from indexer
+
+          Object.keys(state.contracts).map(async (contractAddress) => {
+            //init map for this contract
+            const currentContractdirect_debit_mandates = new Map<
+              { 0: address; 1: FREQUENCY },
+              mutez
+            >();
+            direct_debit_mandates.set(
+              contractAddress as address,
+              currentContractdirect_debit_mandates
+            );
+
+            //fetch info from indexer
+            const contractStorage = state.contracts[contractAddress][0];
+            const direct_debit_mandatesBigMapId = (
+              contractStorage.direct_debit_mandates as unknown as {
+                id: BigNumber;
+              }
+            ).id.toNumber();
+
+            console.log(
+              "************contractStorage.direct_debit_mandates",
+              direct_debit_mandatesBigMapId
+            );
+
+            const direct_debit_mandatesBigMapKeys = await api.bigMapsGetKeys(
+              direct_debit_mandatesBigMapId,
+              {
+                micheline: "Json",
+                active: true,
+              }
+            );
+
+            console.log(
+              "************direct_debit_mandatesBigMapKeys",
+              direct_debit_mandatesBigMapKeys
+            );
+
+            //for each key
+            for (const direct_debit_mandatesBigMapKey of direct_debit_mandatesBigMapKeys) {
+              const amount = await contractStorage.direct_debit_mandates.get({
+                "0": direct_debit_mandatesBigMapKey.key.address,
+                "1": direct_debit_mandatesBigMapKey.key.or,
+              });
+
+              console.log("************amount", amount);
+
+              currentContractdirect_debit_mandates.set(
+                {
+                  "0": direct_debit_mandatesBigMapKey.key.address,
+                  "1": direct_debit_mandatesBigMapKey.key.or,
+                },
+                amount
+              );
+              direct_debit_mandates.set(
+                contractAddress as address,
+                currentContractdirect_debit_mandates
+              );
+              setDirect_debit_mandates(new Map(direct_debit_mandates));
+              console.log("direct_debit_mandates", direct_debit_mandates);
+            }
+          })
+        );
+      }
+    })();
+  }, [state.contracts]);
 
   const [claimedBankAccount, setClaimedBankAccount] = useState<
     string | undefined
@@ -245,6 +342,38 @@ function App() {
 
       enqueueSnackbar(
         ownerToRevoke + " has been revoked from bank account " + bankAccount,
+        "success"
+      );
+    } catch (e) {
+      console.log("Error", e);
+      return;
+    }
+  };
+
+  const revoke_direct_debit_mandate_XTZ = async (
+    bankAccount: string,
+    mandateKey: {
+      0: address;
+      1: FREQUENCY;
+    }
+  ) => {
+    try {
+      const cc: BankAccountWalletType =
+        await state.connection.wallet.at<BankAccountWalletType>(bankAccount);
+
+      const op = await cc.methodsObject
+        .revoke_direct_debit_mandate_XTZ({
+          "0": mandateKey[0],
+          "1": mandateKey[1],
+        })
+        .send();
+
+      await op.confirmation(2);
+
+      await fetchContracts(state);
+
+      enqueueSnackbar(
+        "Mandate has been revoked from bank account " + bankAccount,
         "success"
       );
     } catch (e) {
@@ -368,7 +497,64 @@ function App() {
                     <td style={{ borderStyle: "dotted" }}>
                       {state.currentContract == contractAddress ? "X" : ""}
                     </td>
-                    <td>//TODO</td>
+                    <td style={{ borderStyle: "dotted" }}>
+                      <>
+                        <CreateDirectDebitMandateComponent
+                          bankAccount={contractAddress}
+                          enqueueSnackbar={enqueueSnackbar}
+                        />
+
+                        <table border={1}>
+                          <thead>
+                            <tr>
+                              <th>beneficiary</th>
+                              <th>frequency</th>
+                              <th>amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {direct_debit_mandates &&
+                            direct_debit_mandates.size > 0
+                              ? [
+                                  ...direct_debit_mandates.get(
+                                    contractAddress as address
+                                  )!,
+                                ].map((directDebitMandateEntry) => (
+                                  <tr
+                                    key={
+                                      directDebitMandateEntry[0][0] +
+                                      "-" +
+                                      directDebitMandateEntry[0][1]
+                                    }
+                                  >
+                                    <td>{directDebitMandateEntry[0][0]}</td>
+                                    <td>
+                                      {JSON.stringify(
+                                        directDebitMandateEntry[0][1]
+                                      )}
+                                    </td>
+                                    <td style={{ borderStyle: "dotted" }}>
+                                      {directDebitMandateEntry[1].toNumber()}
+                                    </td>
+                                    <td>
+                                      <IconButton
+                                        onClick={() =>
+                                          revoke_direct_debit_mandate_XTZ(
+                                            contractAddress,
+                                            directDebitMandateEntry[0]
+                                          )
+                                        }
+                                      >
+                                        <DeleteIcon color="error" />
+                                      </IconButton>
+                                    </td>
+                                  </tr>
+                                ))
+                              : ""}
+                          </tbody>
+                        </table>
+                      </>
+                    </td>
                   </tr>
                 )
               )}
