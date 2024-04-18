@@ -1,12 +1,13 @@
 import { TransactionInvalidBeaconError } from "@airgap/beacon-sdk";
 import { AlertColor, TextField } from "@mui/material";
+import { MichelsonMap } from "@taquito/taquito";
+import BigNumber from "bignumber.js";
 import { useContext, useState } from "react";
 import { fetchContracts } from "./App";
-import { STATUS } from "./bank_account.types";
+import { STATUS, Storage } from "./bank_account.types";
 import jsonContractTemplate from "./contractTemplate/bank_account.json";
 import { AppDispatchContext, AppStateContext } from "./state";
-import { address } from "./type-aliases";
-
+import { address, mutez, nat } from "./type-aliases";
 type CreateBankAccountComponentProps = {
   enqueueSnackbar: (message: string, variant: AlertColor) => void;
 };
@@ -27,7 +28,11 @@ export const CreateBankAccountComponent = ({
             owners: [state.address as address],
             inheritors: [],
             status: { aCTIVE: true } as STATUS,
-          },
+            direct_debit_mandates: new MichelsonMap(),
+            direct_debit_mandates_history: new MichelsonMap(),
+            quick_recovery_period: new BigNumber(0) as nat,
+            quick_recovery_stake: new BigNumber(1) as mutez,
+          } as Storage,
           balance: balanceForNewContract,
         })
         .send();

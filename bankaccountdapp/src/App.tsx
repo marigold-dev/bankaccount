@@ -519,7 +519,10 @@ function App() {
                           </thead>
                           <tbody>
                             {direct_debit_mandates &&
-                            direct_debit_mandates.size > 0
+                            direct_debit_mandates.size > 0 &&
+                            direct_debit_mandates.get(
+                              contractAddress as address
+                            )
                               ? [
                                   ...direct_debit_mandates.get(
                                     contractAddress as address
@@ -539,7 +542,8 @@ function App() {
                                       )}
                                     </td>
                                     <td style={{ borderStyle: "dotted" }}>
-                                      {directDebitMandateEntry[1].toNumber() / 1000000}
+                                      {directDebitMandateEntry[1].toNumber() /
+                                        1000000}
                                     </td>
                                     <td>
                                       <IconButton

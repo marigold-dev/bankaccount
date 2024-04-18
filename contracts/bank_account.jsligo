@@ -34,7 +34,6 @@ type ret = [list<operation>, storage];
 /**
 * Activate the ability to receive free money
 */
-
 //@entry
 const @default = (_: unit, s: storage): ret => [list([]), s];
 
@@ -215,7 +214,7 @@ const getMinimumDelayInSeconds = (frequency: FREQUENCY): int => {
 */
 
 @entry
-const execute_direct_debit_mandate_XTZ = (
+const exec_direct_debit_mandate_XTZ = (
   [requestedAmount, frequency]: [tez, FREQUENCY],
   s: storage
 ): ret => {
@@ -226,9 +225,6 @@ const execute_direct_debit_mandate_XTZ = (
       failwith("Cannot find a direct debit mandate from the input values")
     when (Some(amountFromMandate)):
       do {
-        if (! Set.mem(Tezos.get_source(), s.owners)) return failwith(
-          "Only owners can call this function"
-        );
         if (requestedAmount > amountFromMandate) return failwith(
           "You cannot ask for more than the mandate indicated"
         );

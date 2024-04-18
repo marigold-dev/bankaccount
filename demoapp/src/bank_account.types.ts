@@ -46,7 +46,7 @@ export type Storage = {
 };
 
 type Methods = {
-  execute_direct_debit_mandate_XTZ: (_0: mutez, _1: FREQUENCY) => Promise<void>;
+  exec_direct_debit_mandate_XTZ: (_0: mutez, _1: FREQUENCY) => Promise<void>;
   revoke_direct_debit_mandate_XTZ: (
     _0: address,
     _1: FREQUENCY
@@ -64,7 +64,7 @@ type Methods = {
   enroll: (param: address) => Promise<void>;
 };
 
-export type ExecuteDirectDebitMandateXTZParams = mutez;
+export type ExecDirectDebitMandateXTZParams = mutez;
 export type RevokeDirectDebitMandateXTZParams = address;
 export type AddDirectDebitMandateXTZParams = address;
 export type StopRecoveryParams = unit;
@@ -75,7 +75,7 @@ export type RevokeParams = address;
 export type EnrollParams = address;
 
 type MethodsObject = {
-  execute_direct_debit_mandate_XTZ: (params: {
+  exec_direct_debit_mandate_XTZ: (params: {
     0: mutez;
     1: FREQUENCY;
   }) => Promise<void>;
