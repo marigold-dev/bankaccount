@@ -46,7 +46,12 @@ export const CreateDirectDebitMandateComponent = ({
         "success"
       );
 
-      await fetchContracts(state);
+      dispatch!({
+        type: "refreshContracts",
+        payload: {
+          contracts: { ...(await fetchContracts(state)) },
+        },
+      });
     } catch (e) {
       console.log("Error", e);
       return;

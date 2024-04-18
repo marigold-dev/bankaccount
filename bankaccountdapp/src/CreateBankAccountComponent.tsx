@@ -42,7 +42,7 @@ export const CreateBankAccountComponent = ({
       dispatch!({
         type: "refreshContracts",
         payload: {
-          contracts: await fetchContracts(state),
+          contracts: { ...(await fetchContracts(state)) },
         },
       });
     } catch (error) {

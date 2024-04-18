@@ -32,6 +32,13 @@ export type storage = {
 type ret = [list<operation>, storage];
 
 /**
+* Activate the ability to receive free money
+*/
+
+//@entry
+const @default = (_: unit, s: storage): ret => [list([]), s];
+
+/**
 **Enroll an address to the smart contract wallet. Only an owner can do it
 */
 

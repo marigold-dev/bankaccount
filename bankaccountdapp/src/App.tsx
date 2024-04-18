@@ -92,10 +92,6 @@ function App() {
     setOpen(true);
   };
 
-  const [contracts, setContracts] = useState<{
-    [address: string]: [Storage, number];
-  }>({});
-
   const [data, setData] = useState<undefined | string>();
 
   const [direct_debit_mandates, setDirect_debit_mandates] = useState<
@@ -160,15 +156,12 @@ function App() {
           const userAddress = await wallet.getPKH();
           const balance = await state?.connection.tz.getBalance(userAddress);
 
-          const contracts = await fetchContracts(state, userAddress);
-          setContracts(contracts);
-
           dispatch({
             type: "login",
             accountInfo: activeAccount!,
             address: userAddress,
             balance: balance!.toString(),
-            contracts: contracts,
+            contracts: { ...(await fetchContracts(state, userAddress)) },
           });
         }
       }
@@ -370,12 +363,17 @@ function App() {
 
       await op.confirmation(2);
 
-      await fetchContracts(state);
-
       enqueueSnackbar(
         "Mandate has been revoked from bank account " + bankAccount,
         "success"
       );
+
+      dispatch!({
+        type: "refreshContracts",
+        payload: {
+          contracts: { ...(await fetchContracts(state)) },
+        },
+      });
     } catch (e) {
       console.log("Error", e);
       return;
@@ -440,7 +438,14 @@ function App() {
           <h2>Bank accounts</h2>
 
           <button
-            onClick={async () => setContracts(await fetchContracts(state))}
+            onClick={async () => {
+              dispatch!({
+                type: "refreshContracts",
+                payload: {
+                  contracts: { ...(await fetchContracts(state)) },
+                },
+              });
+            }}
           >
             Refresh bank accounts
           </button>
@@ -456,7 +461,7 @@ function App() {
               </tr>
             </thead>
             <tbody>
-              {Array.from(Object.entries(contracts)).map(
+              {Array.from(Object.entries(state.contracts)).map(
                 ([contractAddress, [contractStorage, contractBalance]]) => (
                   <tr key={contractAddress}>
                     <td style={{ borderStyle: "dotted" }}>{contractAddress}</td>
@@ -534,7 +539,7 @@ function App() {
                                       )}
                                     </td>
                                     <td style={{ borderStyle: "dotted" }}>
-                                      {directDebitMandateEntry[1].toNumber()}
+                                      {directDebitMandateEntry[1].toNumber() / 1000000}
                                     </td>
                                     <td>
                                       <IconButton
